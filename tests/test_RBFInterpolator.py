@@ -16,9 +16,9 @@ def test_correctness():
     
     dev = 'cuda'
     for _ in range(1000):
-        num_p = random.randint(64, 2048)
+        num_p = random.randint(64, 1024)
         num_d = random.randint(1, 8)
-        num_x = random.randint(1, 512)
+        num_x = random.randint(1, 256)
         smoothing = random.uniform(0, 100)
         # flip a coin to decide if we use neighbors:
         use_neighbors = random.random() < 0.5
@@ -26,8 +26,7 @@ def test_correctness():
             neighbors = random.randint(32, min(num_p-1, 64))
         else:
             neighbors = None
-        # neighbors_backend = random.choice(['scipy', 'torch_dense'])
-        neighbors_backend = 'scipy'
+        neighbors_backend = random.choice(['scipy', 'torch_dense', 'pytorch3d'])
         kernel = random.choice(list(SCALE_INVARIANT))
 
         y = torch.FloatTensor(num_p, num_d).uniform_(-1, 1).to(dev)

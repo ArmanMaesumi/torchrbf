@@ -21,8 +21,16 @@ class RBFInterpolator(torch.nn.Module):
         for each interpolation point. If None, all points are used.
         Default is None.
     @param neighbors_backend (optional): str, backend for computing nearest neighbors.
-        Options are 'scipy' (uses scipy.spatial.KDTree), 'torch_dense' (uses torch.cdist),
-        or 'pytorch3d' (uses pytorch3d.ops.knn_points). Default is 'scipy'.
+        Options are:
+        - 'scipy' (uses scipy.spatial.KDTree): Default. Best when GPU memory is a concern.
+            Does not support GPU accelerated nearest neighbor search nor autograd. Note that
+            scipy backend is usable even when RBFInterpolator is on GPU. Requires scipy installation.
+        - 'torch_dense' (uses torch.cdist): Naive O(N^2) nearest neighbor backend.
+            Good for small to medium queries on GPU and does not require external
+            dependencies. Supports autograd.
+        - 'pytorch3d' (uses pytorch3d.ops.knn_points): Best for large queries on GPU.
+            Supports autograd. Requires pytorch3d installation.
+        Default is 'scipy'.
     @param smoothing (optional): float or (n,) tensor of smoothing parameters
         Default is 0.0.
     @param kernel (optional): str, kernel function to use; one of
@@ -231,10 +239,12 @@ class RBFInterpolator(torch.nn.Module):
             return indices
             
         elif self.neighbors_backend == "pytorch3d":
-            # Use pytorch3d's knn_points
+            # Use pytorch3d's knn_points to find nearest neighbors
             x_expanded = x.unsqueeze(0)  # (1, nx, ndim)
             y_expanded = self.y.unsqueeze(0)  # (1, ny, ndim)
-            
+            # Cast to float32 to avoid errors, also float64 probably not necessary here
+            x_expanded = x_expanded.to(dtype=torch.float32)
+            y_expanded = y_expanded.to(dtype=torch.float32)
             knn_result = self._knn_points(x_expanded, y_expanded, K=self.neighbors, return_nn=False)
             indices = knn_result.idx.squeeze(0)  # (nx, neighbors)
             return indices

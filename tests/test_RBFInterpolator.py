@@ -20,23 +20,38 @@ def test_correctness():
         num_d = random.randint(1, 8)
         num_x = random.randint(1, 512)
         smoothing = random.uniform(0, 100)
+        # flip a coin to decide if we use neighbors:
+        use_neighbors = random.random() < 0.5
+        if use_neighbors:
+            neighbors = random.randint(32, min(num_p-1, 64))
+        else:
+            neighbors = None
+        # neighbors_backend = random.choice(['scipy', 'torch_dense'])
+        neighbors_backend = 'scipy'
+        kernel = random.choice(list(SCALE_INVARIANT))
 
         y = torch.FloatTensor(num_p, num_d).uniform_(-1, 1).to(dev)
         d = torch.FloatTensor(num_p, num_d).uniform_(-1, 1).to(dev)
         x = torch.FloatTensor(num_x, num_d).uniform_(-1, 1).to(dev)
-
-        kernel = random.choice(list(SCALE_INVARIANT))
-        rbf_torch = torchRBF(y, d, neighbors=None, smoothing=smoothing, kernel=kernel, device=dev)
-        rbf_scipy = RBFInterpolator(y.cpu().numpy(), d.cpu().numpy(), neighbors=None, smoothing=smoothing, kernel=kernel)
+        
+        try:
+            rbf_torch = torchRBF(y, d, neighbors=neighbors, neighbors_backend=neighbors_backend, smoothing=smoothing, kernel=kernel, device=dev)
+        except Exception as e:
+            # if exception is "ValueError: The data is not compatible with the requested degree..." then just skip (the random parameters are just invalid)
+            if 'The data is not compatible with the requested degree' in str(e):
+                continue
+            else:
+                raise e
+        rbf_scipy = RBFInterpolator(y.cpu().numpy(), d.cpu().numpy(), neighbors=neighbors, smoothing=smoothing, kernel=kernel)
 
         out_torch = rbf_torch(x).detach().cpu().numpy()
         out_scipy = rbf_scipy(x.cpu().numpy())
         diff = np.abs(out_torch - out_scipy)
         if not np.all(diff < 2e-3):
             print(f'Possible error: \
-                {kernel} {smoothing} {num_p} {num_d} {num_x}\
+                kernel={kernel}, smoothing={smoothing} num_points={num_p} ndim={num_d} num_x={num_x} neighbors={neighbors} neighbors_backend={neighbors_backend}\
                 Max abs error: {np.max(diff)}, Mean abs error: {np.mean(diff)}')
-        print(f'Test passed: {kernel} {smoothing:.2f} {num_p} {num_d} {num_x}')
+        print(f'Test passed: kernel={kernel}, smoothing={smoothing} num_points={num_p} ndim={num_d} num_x={num_x} neighbors={neighbors} neighbors_backend={neighbors_backend}')
     return
 
 @torch.no_grad()
@@ -95,9 +110,9 @@ def benchmark_forward(
     total_time = 0
     scipy_time = 0
     for _ in range(ntests):
-        y = torch.FloatTensor(num_p, num_d).uniform_(-1, 1)
-        d = torch.FloatTensor(num_p, num_d).uniform_(-1, 1)
-        x = torch.FloatTensor(num_x, num_d).uniform_(-1, 1)
+        y = torch.zeros(num_p, num_d, dtype=torch.float32).uniform_(-1, 1)
+        d = torch.zeros(num_p, num_d, dtype=torch.float32).uniform_(-1, 1)
+        x = torch.zeros(num_x, num_d, dtype=torch.float32).uniform_(-1, 1)
         y = y.to(dev)
         d = d.to(dev)
         x = x.to(dev)
